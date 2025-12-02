@@ -1,0 +1,50 @@
+data_name: Heart
+output_dir: results/heart/intersectional/
+model:
+  class_path: models.generic.GenericModel
+  init_args: 
+    input_dim: 15
+    output_dim: 2
+    hidden_layers: [32, 32]
+    activation: relu
+    dropout: 0.5
+    learning_rate: 0.001
+    weight_decay: 0.0001 
+data:
+  class_path: dataloaders.heart.Heart
+  init_args: 
+    batch_size: 32
+    num_workers: 4
+    pin_memory: false 
+    sensitive_attr: ['sex', 'age']  # Intersectional sensitive attributes
+    is_intersectional: true
+    is_1hot: false
+
+trainer:
+  max_epochs: 500
+  accelerator: cpu
+  devices: 1
+  val_check_interval: 1
+  log_every_n_steps: 1
+  logger:  
+    - class_path: lightning.pytorch.loggers.WandbLogger
+      init_args:
+        name: heart/heart_intersectional
+        save_dir: logs/wandb/heart_intersectional
+        project: bias_modulation
+        entity: patrikj-kenfack-ets  # Replace with your actual WandB entity
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val_loss
+        mode: min
+        save_top_k: 1
+        dirpath: logs/heart_experiment/intersectional/checkpoints/
+        filename: best-checkpoint 
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: val_loss
+        patience: 20
+        mode: min
+        min_delta: 0.0001
+        verbose: false  

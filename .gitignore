@@ -1,0 +1,116 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+eggs/
+*.egg-info/
+pip-wheel-metadata/
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.env.*
+venv/
+.venv/
+env/
+ENV/
+venv.bak/
+env.bak/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing / coverage / caches
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Logs / runtime files
+*.log
+*.pid
+*.csv
+
+# Databases
+*.sqlite3
+*.db
+db.sqlite3
+db.sqlite3-journal
+
+# Documentation
+docs/_build/
+
+# Sphinx / packaging helpers
+*.manifest
+*.spec
+
+# Python dependency managers
+Pipfile.lock
+.pip-wheel-metadata/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Machine learning / PyTorch artifacts
+# Model weights / checkpoints
+*.pt
+*.pth
+*.ckpt
+*.model
+*.h5
+*.onnx
+checkpoints/
+checkpoints/**
+
+# Training logs / experiment tracking
+runs/
+runs/**
+tensorboard/
+tb_logs/
+logs/
+logs/**
+wandb/
+mlruns/
+lightning_logs/
+results/
+
+# Large data / datasets / caches
+data/
+datasets/
+raw_data/
+processed_data/
+*.tar
+*.tgz
+*.gz
+*.zip
+*.npy
+*.npz
+
+# Misc
+*.cover
+.coverage
+*.mo
+*.pot

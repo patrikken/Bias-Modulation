@@ -1,0 +1,9 @@
+ConfigArgParse==1.7.1
+fairlearn==0.12.0
+numpy==1.24.3
+scikit-learn==1.7.2
+torch==2.9.0
+torchvision==0.24.0
+tqdm==4.67.1  
+folktables==0.0.12
+lightning[pytorch-extra]  
