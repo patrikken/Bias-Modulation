@@ -86,21 +86,25 @@ class CustomCLI(LightningCLI):
         )
         # Create output directory if it doesn't exist
         seed = self.config["fit"]["seed_everything"]
+        best_checkpoint = self.trainer.checkpoint_callback.best_model_path
+        self.model.load_state_dict(torch.load(best_checkpoint)["state_dict"])
         if self.config["fit"]["save_weights"]:
             model_dir = os.path.join(out_dir, "models")
             os.makedirs(model_dir, exist_ok=True)
             # Save the trained model
             # model_path = os.path.join(model_dir, "best.pth")
             # torch.save(self.model.state_dict(), model_path)
-
-            self.trainer.save_checkpoint(os.path.join(model_dir, f"best_{seed}.ckpt"))
+            torch.save(
+                self.model.state_dict(), os.path.join(model_dir, f"best_{seed}.ckpt")
+            )
 
         # Recreate the trainer from the existing trainer's arguments, but force devices=1
-        self.trainer.devices = 1
-        results = self.trainer.test(ckpt_path="best", datamodule=self.datamodule)
+        # self.trainer.devices = 1
+        if self.trainer.is_global_zero:
+            results = self.test_model(self.model)
 
-        dir_results = os.path.join(out_dir, "results")
-        save_test_results(dir_results, results, seed)
+            dir_results = os.path.join(out_dir, "results")
+            save_test_results(dir_results, results, seed)
 
     def before_fit(self):
         seed_everything(
@@ -122,6 +126,7 @@ class CustomCLI(LightningCLI):
                 nb_groups=init_args["nb_groups"],
                 nb_group_labels=init_args["nb_group_labels"],
             )
+            dp_model.group_names = self.datamodule.dataset.group_label_names
 
             dp_trainer = copy.deepcopy(
                 self.trainer
@@ -133,14 +138,18 @@ class CustomCLI(LightningCLI):
                 "demographic_predictor",
             )
 
-            model_path = os.path.join(
+            model_dir = os.path.join(
                 out_dir,
+                "results",
                 "models",
+            )
+            model_path = os.path.join(
+                model_dir,
                 f"best_{self.config['fit']['seed_everything']}.ckpt",
             )
 
             if os.path.exists(model_path):
-                dp_model.load_state_dict(torch.load(model_path)["state_dict"])
+                dp_model.load_state_dict(torch.load(model_path))
                 logging.info(
                     f"Loaded pre-trained Demographic Predictor from {model_path}"
                 )
@@ -151,24 +160,44 @@ class CustomCLI(LightningCLI):
                 )
             else:
                 dp_trainer.fit(dp_model, datamodule=self.datamodule)
-                dp_trainer.devices = 1
+                # dp_trainer.devices = 1
                 # load the best checkpoint
-                results = dp_trainer.test(ckpt_path="best", datamodule=self.datamodule)
+                best_checkpoint = dp_trainer.checkpoint_callback.best_model_path
+                dp_model.load_state_dict(torch.load(best_checkpoint)["state_dict"])
+                if self.trainer.is_global_zero:
+                    logging.info("Testing model...")
+                    results = self.test_model(dp_model)
 
-                # save checkppoint and results
+                    # save checkppoint and results
+                    os.makedirs(model_dir, exist_ok=True)
+                    # Save the trained model
+                    torch.save(dp_model.state_dict(), model_path)
+                    logging.info(f"Saved Demographic Predictor to {model_path}")
+                    os.makedirs(os.path.join(out_dir, "results"), exist_ok=True)
+                    # dp_trainer.save_checkpoint(model_path)
 
-                dp_trainer.save_checkpoint(model_path)
-
-            logging.info(f"Demographic Predictor Test Results: {results}")
-            dir_results = os.path.join(
-                out_dir,
-                "results",
-            )
-            save_test_results(
-                dir_results, results, self.config["fit"]["seed_everything"]
-            )
+                    logging.info(f"Demographic Predictor Test Results: {results}")
+                    dir_results = os.path.join(
+                        out_dir,
+                        "results",
+                    )
+                    save_test_results(
+                        dir_results, results, self.config["fit"]["seed_everything"]
+                    )
             # set the demographic predictor weights to the bias modulated model
-            self.model.set_demographic_model_weights(dp_trainer.model.state_dict())
+            self.model.set_demographic_model_weights(dp_model.state_dict())
+
+    def test_model(self, model):
+        model.eval()
+        seed_everything(
+            self.config["fit"]["seed_everything"]
+        )  # Set random seed for reproducibility
+        config = copy.deepcopy(self.config["fit"]["trainer"])
+        test_trainer = Trainer(
+            devices=1, accelerator=config["accelerator"]
+        )  # recreate trainer to avoid issues
+        results = test_trainer.test(model, datamodule=self.datamodule)
+        return results
 
     def after_test(self):
         results = self._results

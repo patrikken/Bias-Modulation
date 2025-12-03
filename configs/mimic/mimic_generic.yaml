@@ -1,0 +1,52 @@
+data_name: mimic
+output_dir: results/mimic/generic/
+seed_everything: 42
+model:
+  class_path: models.generic.GenericModel
+  init_args:
+    input_dim: 11
+    output_dim: 2
+    hidden_layers: [32, 32]
+    activation: relu
+    dropout: 0.5
+    learning_rate: 0.001
+    weight_decay: 0.0001 
+data:
+  class_path: dataloaders.mimic.Mimic
+  init_args:
+    batch_size: 32
+    num_workers: 4
+    pin_memory: false 
+    sensitive_attr: ['sex', 'age']  # Intersectional sensitive attributes
+    is_1hot: false
+    is_intersectional: false
+    is_decoupled: false
+
+trainer:
+  max_epochs: 200
+  accelerator: mps
+  devices: 4
+  check_val_every_n_epoch: 10
+  log_every_n_steps: 40
+  logger:  
+    - class_path: lightning.pytorch.loggers.WandbLogger
+      init_args:
+        name: mimic/generic
+        save_dir: logs/wandb/mimic
+        project: bias_modulation
+        entity: patrikj-kenfack-ets  # Replace with your actual WandB entity
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val_loss
+        mode: min
+        save_top_k: 1
+        dirpath: logs/mimic_experiment/generic/checkpoints/
+        filename: best-checkpoint 
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: val_loss
+        patience: 10
+        mode: min
+        min_delta: 0.001
+        verbose: false  

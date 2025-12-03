@@ -2,6 +2,8 @@
 """
 Aggregate per-seed result CSVs into a LaTeX table.
 
+Note: This script is AI generated, I carefully reviewed and tested it, but there may still be inconsistencies in the table formatting.
+
 Usage:
     python aggregate_results.py --dataset heart --sensitive sex_age
 
@@ -25,7 +27,14 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple
 
-DEFAULT_METHODS = ["generic", "1hot", "intersectional", "multitask", "decoupled"]
+DEFAULT_METHODS = [
+    "generic",
+    "1hot",
+    "intersectional",
+    "multitask",
+    "decoupled",
+    "bias_modulation",
+]
 
 # Mapping for group labels - now using attribute-index format
 # For sex_age: sex[0]age[0] = "Young,Male", sex[0]age[1] = "Old,Male", etc.
@@ -53,6 +62,7 @@ METHOD_NAMES = {
     "intersectional": "Intersectional",
     "multitask": "Multitask",
     "decoupled": "Decoupled",
+    "bias_modulation": "Bias Modulation",
 }
 
 
@@ -220,14 +230,14 @@ def build_single_metric_table(
     lines: List[str] = []
     lines.append("\\begin{table*}")
     lines.append("\\centering")
-    lines.append("\\begin{tabular}{llrrrr}")
+    lines.append("\\begin{tabular}{llrrrrr}")
     lines.append("\\toprule")
     lines.append(
-        "\\textbf{Groups} & \\textbf{Generic} & \\multicolumn{4}{c}{\\textbf{Gains over Generic}} \\\\"
+        "\\textbf{Groups} & \\textbf{Generic} & \\multicolumn{5}{c}{\\textbf{Gains over Generic}} \\\\"
     )
-    lines.append("\\cmidrule(r){3-6}")
+    lines.append("\\cmidrule(r){3-7}")
     lines.append(
-        "& & \\textbf{1Hot} & \\textbf{Intersectional} & \\textbf{Multitask} & \\textbf{Decoupled} \\\\"
+        "& & \\textbf{1Hot} & \\textbf{Intersectional} & \\textbf{Multitask} & \\textbf{Decoupled} & \\textbf{Bias Modulation} \\\\"
     )
     lines.append("\\midrule")
 
@@ -318,6 +328,7 @@ def build_single_metric_table(
     lines.append(" & ".join(row_cells) + " \\\\")
 
     # Overall row
+    lines.append("\\midrule")
     row_cells = [f"\\textbf{{Overall}}"]
 
     # Generic overall test_[metric]

@@ -2,14 +2,13 @@ import lightning as L
 import torch
 import torch.nn as nn
 from torchmetrics.classification import Accuracy, AUROC
-from metrics.fairness import DemParityMetric, EqualizedOdds, EqualOpportunity
 from models.mlp import MLP
 import copy
 import logging
 import numpy as np
 
 
-class DemographicPredictor(MLP):
+class MultiTaskModel(MLP):
     def __init__(
         self,
         input_dim,
@@ -21,7 +20,6 @@ class DemographicPredictor(MLP):
         activation="relu",
         nb_groups=2,
         nb_group_labels=4,
-        include_label_head=True,
         head_weights=None,
     ):
         super().__init__(
@@ -39,10 +37,9 @@ class DemographicPredictor(MLP):
         # remove last layer from parent MLP
         self.model = nn.Sequential(*list(self.model.children())[:-1])
 
-        nb_heads = nb_groups  # one head per sensitive attribute
-        self.include_label_head = include_label_head
-        if self.include_label_head:
-            nb_heads += 1  # one extra head for label prediction and first head for label prediction
+        nb_heads = (
+            nb_groups + 1
+        )  # one extra head for label prediction and first head for label prediction
 
         if head_weights is not None and len(head_weights) > nb_heads:
             self.head_weights = head_weights
@@ -74,7 +71,7 @@ class DemographicPredictor(MLP):
     def _get_log_model_info(self):
         return (
             super()._get_log_model_info()
-            + f"For sensitive attribute prediction with {len(self.heads)} heads. Include label head: {self.include_label_head}."
+            + f"For multitask learning with {len(self.heads)} heads."
         )
 
     def forward(self, x):
@@ -98,12 +95,10 @@ class DemographicPredictor(MLP):
         preds = []
         head_losses = []
         for i in range(len(self.heads)):
-            if self.include_label_head and i == 0:  # first head is for label prediction
+            if i == 0:  # first head is for label prediction
                 labels = y
             else:
-                idx = i - int(
-                    self.include_label_head
-                )  # adjust index if label head is included
+                idx = i - 1  # adjust index for sensitive attributes
                 labels = s[:, idx]
             head_logits = logits[i]  # get logits for head i
 
@@ -123,33 +118,8 @@ class DemographicPredictor(MLP):
         emb, logits = self(x)
         return logits[0]  # return only label head logits
 
-    """ def compute_per_group_acc(self, batch):
-        if not self.include_label_head:
-            return
-        x, y, s, group_idx = batch
-        _preds = []
-        _s = []
-        _y = []
-        for g in range(self.nb_groups):
-            idx = group_idx == g
-            emb, logits = self(x[idx])
-            logits = logits[0]  # first head is for label prediction, ignore others
-            # logits = self(x, group_idx=group_idx)
-            preds = torch.argmax(logits, dim=1)
-            # loss = loss.mean()
-            self.log_group_metrics(logits, y[idx], g)
-
-            _preds.append(preds)
-            _y.append(y[idx])
-            _s.append(s[idx])
-        return torch.cat(_preds), torch.cat(_y), torch.cat(_s) """
-
     def log_metrics(self, preds, labels, loss, stage, head_idx=None):
-        log_label = (
-            "_label"
-            if (self.include_label_head and head_idx == 0)
-            else f"_head_{head_idx - int(self.include_label_head)}"
-        )
+        log_label = "_label" if head_idx == 0 else f"_head_{head_idx - 1}"
         if stage == "train" and head_idx is not None:
             train_acc = self.per_head_train_acc[head_idx](preds, labels)
             self.log(f"{stage}{log_label}_acc", train_acc, on_step=False, on_epoch=True)
@@ -172,11 +142,7 @@ class DemographicPredictor(MLP):
                 sync_dist=True,
             )
         elif stage == "test" and head_idx is not None:
-            log_label = (
-                ""
-                if (self.include_label_head and head_idx == 0)
-                else f"_head_{head_idx - int(self.include_label_head)}"
-            )
+            log_label = "" if head_idx == 0 else f"_head_{head_idx - 1}"
             test_acc = self.per_head_test_acc[head_idx](preds, labels)
             test_roc = self.per_head_roc[head_idx](preds, labels)
 
@@ -201,11 +167,4 @@ class DemographicPredictor(MLP):
                 on_epoch=True,
                 sync_dist=True,
             )
-            """ self.log(
-                f"{stage}_group_{head_idx}_loss",
-                loss,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            ) """
         return

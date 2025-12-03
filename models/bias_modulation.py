@@ -1,7 +1,7 @@
 import lightning as L
 import torch
 import torch.nn as nn
-from torchmetrics.classification import Accuracy, AUROC
+from torchmetrics.classification import Accuracy, AUROC, CalibrationError
 from metrics.fairness import DemParityMetric, EqualizedOdds, EqualOpportunity
 from models.mlp import MLP
 import copy
@@ -28,6 +28,84 @@ class ModulatedLinear(nn.Linear):
             # with torch.no_grad():
             #    bias = self.bias + bias_vect
             return F.linear(x, self.weight, self.bias + bias_vect)
+
+
+class MultiTargetDemographicModel(MLP):
+    def __init__(
+        self,
+        input_dim,
+        hidden_layers,
+        output_dim,
+        dropout,
+        learning_rate,
+        weight_decay,
+        activation="relu",
+        nb_groups=2,
+        nb_group_labels=4,
+        head_weights=None,
+    ):
+        super().__init__(
+            input_dim,
+            hidden_layers,
+            output_dim,
+            dropout,
+            learning_rate,
+            weight_decay,
+            activation,
+            nb_groups,
+            nb_group_labels,
+        )
+
+        prev_dim = input_dim
+        self.layers = []
+        for hidden_dim in hidden_layers:
+            layers = nn.Sequential(
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            )
+            self.layers.append(layers)
+            prev_dim = hidden_dim
+
+        # self.layers.append(nn.Linear(hidden_layers[-1], output_dim))
+
+        self.layers = nn.ModuleList(self.layers)
+        del self.model  # remove the base model
+
+        nb_heads = nb_group_labels  # one head per sensitive attribute label
+
+        if head_weights is not None and len(head_weights) > nb_heads:
+            self.head_weights = head_weights
+        else:
+            # uniform weights for each head
+            logging.info(
+                f"Setting uniform weights for each of the {nb_heads} heads. Ensure length of head_weights matches number of heads {nb_heads}."
+            )
+            self.head_weights = [1.0 / nb_heads for _ in range(nb_heads)]
+
+        self.heads = nn.ModuleList(
+            [nn.Linear(hidden_layers[-1], output_dim) for _ in range(nb_heads)]
+        )
+
+        self.per_head_train_acc = [
+            Accuracy(task="binary", threshold=0.5) for _ in range(len(self.heads))
+        ]
+        self.per_head_val_acc = [
+            Accuracy(task="binary", threshold=0.5) for _ in range(len(self.heads))
+        ]
+        self.per_head_test_acc = [
+            Accuracy(task="binary", threshold=0.5) for _ in range(len(self.heads))
+        ]
+
+        self.per_head_roc = [AUROC(task="binary") for _ in range(len(self.heads))]
+
+        self.head_weights = [1.0 / len(self.heads) for _ in range(len(self.heads))]
+
+    def _get_log_model_info(self):
+        return (
+            super()._get_log_model_info()
+            + f"For sensitive attribute prediction with {len(self.heads)} heads."
+        )
 
 
 class DemographicPredictor(MLP):
@@ -134,14 +212,15 @@ class DemographicPredictor(MLP):
             labels = s[:, i]
             head_logits = logits[i]  # get logits for head i
 
-            loss += self.head_weights[i] * self.criterion(
+            loss = self.head_weights[i] * self.criterion(
                 head_logits, labels
             )  # assuming labels is the sensitive attribute label for head i
+            head_losses.append(loss)
             # head_losses.append(loss)
             preds = torch.argmax(head_logits, dim=1)
             self.log_metrics(preds, labels, loss, stage, head_idx=i)
 
-        loss = loss / len(self.heads)
+        loss = sum(head_losses)
 
         self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
         return loss
@@ -170,9 +249,19 @@ class DemographicPredictor(MLP):
         if stage == "train" and head_idx is not None:
             train_acc = self.per_head_train_acc[head_idx](preds, labels)
             self.log(
-                f"{stage}_{log_label}_acc", train_acc, on_step=False, on_epoch=True
+                f"{stage}_{log_label}_acc",
+                train_acc,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
             )
-            self.log(f"{stage}_{log_label}_loss", loss, on_step=False, on_epoch=True)
+            self.log(
+                f"{stage}_{log_label}_loss",
+                loss,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+            )
         elif stage == "val" and head_idx is not None:
             val_acc = self.per_head_val_acc[head_idx](preds, labels)
             self.log(
@@ -209,14 +298,14 @@ class DemographicPredictor(MLP):
                 on_epoch=True,
                 sync_dist=True,
             )
-            self.log(
+            """ self.log(
                 f"{stage}_group_{head_idx}_auroc",
                 test_roc,
                 on_step=False,
                 on_epoch=True,
                 sync_dist=True,
             )
-            """ self.log(
+             self.log(
                 f"{stage}_group_{head_idx}_loss",
                 loss,
                 on_step=False,

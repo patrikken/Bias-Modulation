@@ -7,7 +7,7 @@ configs=("configs/heart/heart_generic.yaml" "configs/heart/heart_1hot.yaml" "con
 
 sensitive_feature_list=("['sex', 'age']")
 sensitive_feature_list=("['sex']" "['age']" "['sex', 'age']")  
-configs=("configs/heart/heart_bias_modulation.yaml")
+configs=("configs/heart/heart_bias_modulation.yaml ")
 for seed in 6 7 8 9 10; do 
     echo "Running with seed $seed"
     for config in "${configs[@]}"; do  

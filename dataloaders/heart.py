@@ -128,9 +128,9 @@ class HeartDataset(BaseDataset):
             test_size=0.2,
             stratify=self.target,
         )
-        print(
+        """ print(
             f"Loaded Heart\n List of features: {column_list} \n {'Train' if self.train else 'Test'} \n dataset size: {len(self.train_idx) if self.train else len(self.test_idx)} samples"
-        )
+        ) """
         self.input_dim = self.data.shape[1]
         self.group_label = self.group_label.values
         self.target = self.target.values
@@ -138,7 +138,7 @@ class HeartDataset(BaseDataset):
         self.nb_group_labels = len(
             np.unique(self.group_idx)
         )  # number of unique sensitive attribute combinations
-
+        self.out_dir = os.path.join("results", "heart")
         return self
 
     def download(

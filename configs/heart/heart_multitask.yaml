@@ -2,7 +2,7 @@ data_name: Heart
 output_dir: results/heart/multitask/
 seed_everything: 42
 model:
-  class_path: models.multitask.DemographicPredictor
+  class_path: models.multitask.MultiTaskModel
   init_args:
     input_dim: 11
     output_dim: 2
@@ -11,8 +11,7 @@ model:
     dropout: 0.5
     learning_rate: 0.001
     weight_decay: 0.0001
-    nb_groups: 4
-    include_label_head: true
+    nb_groups: 4 
     head_weights: [1, 1, 1]  # Weights for [main_task, sensitive_attr1, sensitive_attr2]
 data:
   class_path: dataloaders.heart.Heart

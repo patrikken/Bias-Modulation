@@ -155,13 +155,13 @@ class MLP(L.LightningModule):
         ece = self.per_group_ece[group_id](logits, labels)
         group_name = (
             self.group_names[group_id]
-            if self.group_names is not None and len(self.group_names) < group_id
+            if self.group_names is not None and len(self.group_names) > group_id
             else group_id
         )
-        self.log(f"{stage}_group_{group_name}_auroc", auc)
-        self.log(f"{stage}_group_{group_name}_acc", acc)
-        self.log(f"{stage}_group_{group_name}_loss", loss)
-        self.log(f"{stage}_group_{group_name}_ece", ece)
+        self.log(f"{stage}_group_{group_name}_auroc", auc, sync_dist=True)
+        self.log(f"{stage}_group_{group_name}_acc", acc, sync_dist=True)
+        self.log(f"{stage}_group_{group_name}_loss", loss, sync_dist=True)
+        self.log(f"{stage}_group_{group_name}_ece", ece, sync_dist=True)
 
     def log_metrics(self, preds, y, s, loss, stage):
         if stage == "test":
