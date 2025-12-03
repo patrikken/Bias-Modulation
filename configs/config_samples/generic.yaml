@@ -1,5 +1,5 @@
-data_name: mimic
-output_dir: results/mimic/generic/
+method_name: generic
+output_dir: results/heart/generic/
 seed_everything: 42
 model:
   class_path: models.generic.GenericModel
@@ -12,7 +12,7 @@ model:
     learning_rate: 0.001
     weight_decay: 0.0001 
 data:
-  class_path: dataloaders.mimic.Mimic
+  class_path: dataloaders.heart.Heart
   init_args:
     batch_size: 32
     num_workers: 4
@@ -23,30 +23,23 @@ data:
     is_decoupled: false
 
 trainer:
-  max_epochs: 200
-  accelerator: mps
-  devices: 4
-  check_val_every_n_epoch: 10
-  log_every_n_steps: 40
-  logger:  
-    - class_path: lightning.pytorch.loggers.WandbLogger
-      init_args:
-        name: mimic/generic
-        save_dir: logs/wandb/mimic
-        project: bias_modulation
-        entity: patrikj-kenfack-ets  # Replace with your actual WandB entity
+  max_epochs: 500
+  accelerator: cpu
+  devices: 1
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 1 
   callbacks:
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
         monitor: val_loss
         mode: min
         save_top_k: 1
-        dirpath: logs/mimic_experiment/generic/checkpoints/
+        dirpath: logs/heart_experiment/generic/checkpoints/
         filename: best-checkpoint 
     - class_path: lightning.pytorch.callbacks.EarlyStopping
       init_args:
         monitor: val_loss
-        patience: 10
+        patience: 20
         mode: min
-        min_delta: 0.001
+        min_delta: 0.0001
         verbose: false  

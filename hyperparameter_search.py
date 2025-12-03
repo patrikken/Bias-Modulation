@@ -126,10 +126,12 @@ if __name__ == "__main__":
         cfg["model"]["class_path"] = "models.bias_modulation.BiasModulated"
     elif cfg["method_name"] == "1hot":
         cfg["model"]["class_path"] = "models.generic.GenericModel"
-        cfg["model"]["init_args"]["is_1hot"] = True
+        cfg["data"]["init_args"]["is_1hot"] = True
     elif cfg["method_name"] == "intersectional":
         cfg["model"]["class_path"] = "models.generic.GenericModel"
-        cfg["model"]["init_args"]["is_intersectional"] = True
+        cfg["data"]["init_args"]["is_intersectional"] = True
+    elif cfg["method_name"] == "multitask":
+        cfg["model"]["class_path"] = "models.multitask.MultiTaskModel"
     else:
         raise ValueError(f"Unsupported method: {cfg['method_name']}")
 
@@ -210,6 +212,8 @@ if __name__ == "__main__":
             enable_model_summary=False,
             devices=1,
             accelerator="cuda" if torch.cuda.is_available() else "cpu",
+            log_every_n_steps=1,
+            #check_val_every_n_epoch=1,
         )
         val_loss = train_model(conf, model_instance, datamodule, trainer_instance)
         return val_loss
@@ -260,7 +264,7 @@ if __name__ == "__main__":
 
     best_params = optimize_hyperparameters(n_trials=100)
     test_results = train_final_model(best_params)
-
+    sensitive_attr = "_".join(datamodule.dataset.sensitive_attr)
     out_dir = os.path.join("results", cfg["dataset_name"], cfg["method_name"])
-    dir_results = os.path.join(out_dir, "results")
+    dir_results = os.path.join(out_dir, "results", sensitive_attr)
     save_test_results(dir_results, test_results, seed=seed)
