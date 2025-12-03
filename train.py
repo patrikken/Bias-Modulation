@@ -32,6 +32,13 @@ class CustomCLI(LightningCLI):
         )
 
         parser.add_argument(
+            "--method_name",
+            type=str,
+            default="1hot",
+            help="Name of the method to use (e.g., 1hot, bias_modulation)",
+        )
+
+        parser.add_argument(
             "--output_dir",
             type=str,
             default="./results",
@@ -164,7 +171,7 @@ class CustomCLI(LightningCLI):
                 # load the best checkpoint
                 best_checkpoint = dp_trainer.checkpoint_callback.best_model_path
                 dp_model.load_state_dict(torch.load(best_checkpoint)["state_dict"])
-                if self.trainer.is_global_zero:
+                if self.trainer.global_rank == 0:
                     logging.info("Testing model...")
                     results = self.test_model(dp_model)
 
@@ -188,13 +195,16 @@ class CustomCLI(LightningCLI):
             self.model.set_demographic_model_weights(dp_model.state_dict())
 
     def test_model(self, model):
-        model.eval()
+        # model.eval()
         seed_everything(
             self.config["fit"]["seed_everything"]
         )  # Set random seed for reproducibility
         config = copy.deepcopy(self.config["fit"]["trainer"])
         test_trainer = Trainer(
-            devices=1, accelerator=config["accelerator"]
+            devices=1,
+            accelerator=config["accelerator"],
+            max_epochs=config["max_epochs"],
+            log_every_n_steps=config.get("log_every_n_steps", 50),
         )  # recreate trainer to avoid issues
         results = test_trainer.test(model, datamodule=self.datamodule)
         return results

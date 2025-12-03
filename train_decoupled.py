@@ -8,7 +8,6 @@ from lightning.pytorch import Trainer
 from models.decoupled import DecoupledModel
 from models.mlp import MLP
 import logging
-from lightning.pytorch import Trainer
 from jsonargparse import ArgumentParser, auto_cli
 from dataloaders.heart import Heart, BaseDataModule
 import torch

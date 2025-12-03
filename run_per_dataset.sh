@@ -8,7 +8,7 @@ dataset_class_paths=("dataloaders.mimic.Mimic")
 sensitive_feature_list=("['sex', 'age']")
 sensitive_feature_list=("['sex', 'age']" "['sex']" "['age']")  
 max_epoch=200
-devices=4
+devices=1
 accelerator="cpu"
 strategy="ddp_find_unused_parameters_true"
 

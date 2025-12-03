@@ -1,4 +1,4 @@
-data_name: Heart
+method_name: intersectional
 output_dir: results/heart/intersectional/
 model:
   class_path: models.generic.GenericModel

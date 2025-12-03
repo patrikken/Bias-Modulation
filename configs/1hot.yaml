@@ -1,4 +1,4 @@
-data_name: Heart
+method_name: 1hot
 output_dir: results/heart/1hot/
 model:
   class_path: models.generic.GenericModel

@@ -365,7 +365,11 @@ class BiasModulated(MLP):
         prev_dim = input_dim
         for hidden_dim in hidden_layers:
             layers = nn.Sequential(
-                ModulatedLinear(prev_dim, hidden_dim),
+                ModulatedLinear(
+                    prev_dim,
+                    hidden_dim,
+                    bias=False if remove_bias_in_linear_layers else True,
+                ),
                 nn.ReLU(),
                 nn.Dropout(dropout),
             )

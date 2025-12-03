@@ -1,4 +1,4 @@
-data_name: Heart
+method_name: multitask
 output_dir: results/heart/multitask/
 seed_everything: 42
 model:

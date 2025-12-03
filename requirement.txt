@@ -7,3 +7,5 @@ torchvision==0.24.0
 tqdm==4.67.1  
 folktables==0.0.12
 lightning[pytorch-extra]  
+optuna
+optuna-integration[pytorch_lightning]

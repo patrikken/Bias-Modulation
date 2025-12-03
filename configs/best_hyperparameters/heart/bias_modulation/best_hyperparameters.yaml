@@ -1,0 +1,133 @@
+!!python/object:jsonargparse._namespace.Namespace
+c:
+- !!python/object:jsonargparse._util.Path
+  _absolute: /Users/patrik/workspace - research/BiasModulationV2/configs/generic.yaml
+  _cwd: /Users/patrik/workspace - research/BiasModulationV2
+  _is_fsspec: false
+  _is_url: false
+  _mode: fsr
+  _relative: configs/generic.yaml
+  _skip_check: false
+  _std_io: false
+  _url_data: null
+data: !!python/object:jsonargparse._namespace.Namespace
+  class_path: dataloaders.heart.Heart
+  init_args: !!python/object:jsonargparse._namespace.Namespace
+    batch_size: 32
+    is_1hot: false
+    is_decoupled: false
+    is_intersectional: false
+    num_workers: 4
+    persistent_workers: true
+    pin_memory: false
+    sensitive_attr:
+    - sex
+    - age
+dataset_name: heart
+method_name: bias_modulation
+model: !!python/object:jsonargparse._namespace.Namespace
+  class_path: models.generic.GenericModel
+  init_args: !!python/object:jsonargparse._namespace.Namespace
+    activation: relu
+    dropout: 0.3461748228705476
+    hidden_layers:
+    - 32
+    - 32
+    input_dim: 11
+    learning_rate: 0.09929945510161219
+    nb_group_labels: 4
+    nb_groups: 2
+    output_dim: 2
+    weight_decay: 0.006799195051700846
+optimizer: !!python/object:jsonargparse._namespace.Namespace
+  init_args: !!python/object:jsonargparse._namespace.Namespace
+    amsgrad: false
+    betas: !!python/tuple
+    - 0.9
+    - 0.999
+    capturable: false
+    decoupled_weight_decay: false
+    differentiable: false
+    eps: 1.0e-08
+    foreach: null
+    fused: null
+    lr: 0.001
+    maximize: false
+    weight_decay: 0
+output_dir: results/heart/generic/
+seed_everything: 42
+trainer: !!python/object:jsonargparse._namespace.Namespace
+  class_path: lightning.Trainer
+  init_args: !!python/object:jsonargparse._namespace.Namespace
+    accelerator: cpu
+    accumulate_grad_batches: 1
+    barebones: false
+    benchmark: null
+    callbacks:
+    - !!python/object:jsonargparse._namespace.Namespace
+      class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args: !!python/object:jsonargparse._namespace.Namespace
+        auto_insert_metric_name: true
+        dirpath: logs/heart_experiment/generic/checkpoints/
+        enable_version_counter: true
+        every_n_epochs: null
+        every_n_train_steps: null
+        filename: best-checkpoint
+        mode: min
+        monitor: val_loss
+        save_last: null
+        save_on_exception: false
+        save_on_train_epoch_end: null
+        save_top_k: 1
+        save_weights_only: false
+        train_time_interval: null
+        verbose: false
+    - !!python/object:jsonargparse._namespace.Namespace
+      class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args: !!python/object:jsonargparse._namespace.Namespace
+        check_finite: true
+        check_on_train_epoch_end: null
+        divergence_threshold: null
+        log_rank_zero_only: false
+        min_delta: 0.0001
+        mode: min
+        monitor: val_loss
+        patience: 20
+        stopping_threshold: null
+        strict: true
+        verbose: false
+    check_val_every_n_epoch: 1
+    default_root_dir: null
+    detect_anomaly: false
+    deterministic: null
+    devices: 1
+    enable_checkpointing: null
+    enable_model_summary: null
+    enable_progress_bar: null
+    fast_dev_run: false
+    gradient_clip_algorithm: null
+    gradient_clip_val: null
+    inference_mode: true
+    limit_predict_batches: null
+    limit_test_batches: null
+    limit_train_batches: null
+    limit_val_batches: null
+    log_every_n_steps: 1
+    logger: null
+    max_epochs: 500
+    max_steps: -1
+    max_time: null
+    min_epochs: null
+    min_steps: null
+    model_registry: null
+    num_nodes: 1
+    num_sanity_val_steps: null
+    overfit_batches: 0.0
+    plugins: null
+    precision: null
+    profiler: null
+    reload_dataloaders_every_n_epochs: 0
+    strategy: auto
+    sync_batchnorm: false
+    use_distributed_sampler: true
+    val_check_interval: null
