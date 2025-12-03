@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.out
+
 
 # Packaging / build
 build/
@@ -22,6 +24,7 @@ env/
 ENV/
 venv.bak/
 env.bak/
+.slurm/
 
 # IDEs / editors
 .vscode/
