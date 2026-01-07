@@ -1,0 +1,6 @@
+dropout: 0.2917776862483766
+hidden_layers:
+- 32
+- 32
+learning_rate: 0.038700333710396835
+weight_decay: 0.008546254462910366

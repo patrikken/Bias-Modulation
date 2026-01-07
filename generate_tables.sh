@@ -3,6 +3,7 @@
 # Usage: ./generate_tables.sh <dataset> [options]
 #
 # Examples:
+#   ./generate_tables.sh heart --attrs sex_age --metrics all
 #   ./generate_tables.sh heart                    # All attributes, all metrics
 #   ./generate_tables.sh heart --attrs sex age    # Specific attributes, all metrics
 #   ./generate_tables.sh heart --metrics loss acc # All attributes, specific metrics

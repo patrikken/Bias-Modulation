@@ -121,11 +121,11 @@ class MultiTaskModel(MLP):
     def log_metrics(self, preds, labels, loss, stage, head_idx=None):
         log_label = "_label" if head_idx == 0 else f"_head_{head_idx - 1}"
         if stage == "train" and head_idx is not None:
-            train_acc = self.per_head_train_acc[head_idx](preds, labels)
+            train_acc = self.per_head_train_acc[head_idx].to(preds.device)(preds, labels)
             self.log(f"{stage}{log_label}_acc", train_acc, on_step=False, on_epoch=True)
             self.log(f"{stage}{log_label}_loss", loss, on_step=False, on_epoch=True)
         elif stage == "val" and head_idx is not None:
-            val_acc = self.per_head_val_acc[head_idx](preds, labels)
+            val_acc = self.per_head_val_acc[head_idx].to(preds.device)(preds, labels)
             self.log(
                 f"{stage}{log_label}_acc",
                 val_acc,
@@ -143,8 +143,8 @@ class MultiTaskModel(MLP):
             )
         elif stage == "test" and head_idx is not None:
             log_label = "" if head_idx == 0 else f"_head_{head_idx - 1}"
-            test_acc = self.per_head_test_acc[head_idx](preds, labels)
-            test_roc = self.per_head_roc[head_idx](preds, labels)
+            test_acc = self.per_head_test_acc[head_idx].to(preds.device)(preds, labels)
+            test_roc = self.per_head_roc[head_idx].to(preds.device)(preds, labels)
 
             self.log(
                 f"{stage}{log_label}_loss",

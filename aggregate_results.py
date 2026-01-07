@@ -121,7 +121,7 @@ def build_single_metric_table(
 
     # Collect seed data per method
     for method in methods:
-        results_path = root / dataset / method / sensitive / "results"
+        results_path = root / dataset / method / sensitive 
         seed_rows = collect_method_seeds(results_path)
         if not seed_rows:
             continue

@@ -74,8 +74,8 @@ class MultiTargetDemographicModel(MLP):
 
         nb_heads = nb_group_labels  # one head per sensitive attribute label
 
-        if head_weights is not None and len(head_weights) > nb_heads:
-            self.head_weights = head_weights
+        if head_weights is not None and len(head_weights) >= nb_heads:
+            self.head_weights = head_weights[:nb_heads]
         else:
             # uniform weights for each head
             logging.info(
@@ -247,7 +247,7 @@ class DemographicPredictor(MLP):
     def log_metrics(self, preds, labels, loss, stage, head_idx=None):
         log_label = f"head_{head_idx}" if head_idx is not None else ""
         if stage == "train" and head_idx is not None:
-            train_acc = self.per_head_train_acc[head_idx](preds, labels)
+            train_acc = self.per_head_train_acc[head_idx].to(preds.device)(preds, labels)
             self.log(
                 f"{stage}_{log_label}_acc",
                 train_acc,
@@ -263,7 +263,7 @@ class DemographicPredictor(MLP):
                 sync_dist=True,
             )
         elif stage == "val" and head_idx is not None:
-            val_acc = self.per_head_val_acc[head_idx](preds, labels)
+            val_acc = self.per_head_val_acc[head_idx].to(preds.device)(preds, labels)
             self.log(
                 f"{stage}_{log_label}_acc",
                 val_acc,
@@ -281,8 +281,8 @@ class DemographicPredictor(MLP):
             )
         elif stage == "test" and head_idx is not None:
             log_label = f"head_{head_idx}"
-            test_acc = self.per_head_test_acc[head_idx](preds, labels)
-            test_roc = self.per_head_roc[head_idx](preds, labels)
+            test_acc = self.per_head_test_acc[head_idx].to(preds.device)(preds, labels)
+            test_roc = self.per_head_roc[head_idx].to(preds.device)(preds, labels)
 
             self.log(
                 f"{stage}_{log_label}_loss",
@@ -331,6 +331,138 @@ class BiasModulated(MLP):
         remove_bias_in_linear_layers=False,
         modulated_layers_indices=None,
         modulated_at_inference=False,
+        hidden_layers_demographic=None,
+        head_weights=None,
+        embedding_layer=-1,
+    ):
+        super().__init__(
+            input_dim,
+            hidden_layers,
+            output_dim,
+            dropout,
+            learning_rate,
+            weight_decay,
+            activation,
+            nb_groups,
+            nb_group_labels,
+        )
+
+        if demographic_model is None:
+            self.demographic_model = DemographicPredictor(
+                input_dim,
+                hidden_layers_demographic if hidden_layers_demographic is not None else hidden_layers,
+                output_dim,
+                dropout,
+                learning_rate,
+                weight_decay,
+                activation,
+                nb_groups=nb_groups,
+                nb_group_labels=nb_group_labels,
+                head_weights=head_weights,
+            )
+        else:
+            self.demographic_model = demographic_model
+
+        self.layers = []
+        prev_dim = input_dim
+        for hidden_dim in hidden_layers:
+            layers = nn.Sequential(
+                ModulatedLinear(
+                    prev_dim,
+                    hidden_dim,
+                    bias=False if remove_bias_in_linear_layers else True,
+                ),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            )
+            self.layers.append(layers)
+            prev_dim = hidden_dim
+        self.layers = nn.ModuleList(self.layers)
+        # self.layers.append(nn.Linear(hidden_layers[-1], output_dim))
+        self.output_layer = nn.Linear(hidden_layers[-1], output_dim)
+        self.embedding_layer = embedding_layer
+        self.bias_vect_mlp = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_layers[self.embedding_layer], hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, hidden_dim),
+                )
+                for hidden_dim in hidden_layers
+            ]
+        )
+
+        self.modulated_layers_indices = (
+            modulated_layers_indices
+            if modulated_layers_indices is not None
+            else list(range(len(self.layers)))
+        )
+
+        self.modulated_at_inference = modulated_at_inference
+
+        del self.model  # remove the base model
+
+    def set_demographic_model_weights(self, state_dict):
+        if self.demographic_model is None:
+            raise ValueError("Demographic model is not initialized.")
+        self.demographic_model.load_state_dict(state_dict)
+        self.demographic_model.eval()
+
+    def forward(self, x, is_bias_modulation=None):
+        with torch.no_grad():
+            self.demographic_model.eval() # ensure demographic model is in eval mode
+            sensitive_embeddings, _ = self.demographic_model(x)
+            embeddings = sensitive_embeddings[self.embedding_layer]
+            # process embeddings to get bias vectors for each layer
+        sensitive_embeddings = []
+        for mlp in self.bias_vect_mlp:
+            bias_vect = mlp(embeddings)
+            sensitive_embeddings.append(bias_vect)
+
+        for i, layer in enumerate(self.layers):
+            if is_bias_modulation and i in self.modulated_layers_indices:
+                logging.debug(f"Applying bias modulation at layer {i}")
+                # mainly used during training
+                bias_vect = sensitive_embeddings[i] 
+                x = layer[0](x, bias_vect=bias_vect)  # ModulatedLinear layer
+                x = layer[1](x)  # ReLU
+                x = layer[2](x)  # Dropout
+            else:
+                logging.debug(f"No bias modulation at layer {i}")
+                x = layer(x)
+        x = self.output_layer(x)
+        return x
+
+    def _get_logits(self, x):
+        return self.forward(x, is_bias_modulation=self.modulated_at_inference)
+
+    def _step(self, batch, stage):
+        x, y, s, _ = batch
+        is_bias_modulation = True if stage == "train" else self.modulated_at_inference
+        logits = self(x, is_bias_modulation=is_bias_modulation)
+        loss = self.criterion(logits, y)
+        preds = torch.argmax(logits, dim=1)
+        self.log_metrics(preds, y, s, loss, stage)
+        return loss
+
+
+class BiasModulatedLayerWise(MLP):
+    def __init__(
+        self,
+        input_dim,
+        hidden_layers,
+        output_dim,
+        dropout,
+        learning_rate,
+        weight_decay,
+        activation="relu",
+        nb_groups=4,
+        nb_group_labels=4,
+        demographic_model: DemographicPredictor = None,
+        remove_bias_in_linear_layers=False,
+        modulated_layers_indices=None,
+        modulated_at_inference=False,
+        hidden_layers_demographic=None,
         head_weights=None,
     ):
         super().__init__(
@@ -348,7 +480,7 @@ class BiasModulated(MLP):
         if demographic_model is None:
             self.demographic_model = DemographicPredictor(
                 input_dim,
-                hidden_layers,
+                hidden_layers_demographic if hidden_layers_demographic is not None else hidden_layers,
                 output_dim,
                 dropout,
                 learning_rate,
@@ -393,15 +525,18 @@ class BiasModulated(MLP):
         if self.demographic_model is None:
             raise ValueError("Demographic model is not initialized.")
         self.demographic_model.load_state_dict(state_dict)
+        self.demographic_model.eval()
 
     def forward(self, x, is_bias_modulation=None):
-        sensitive_embeddings, _ = self.demographic_model(x)
+        with torch.no_grad():
+            self.demographic_model.eval() # ensure demographic model is in eval mode
+            sensitive_embeddings, _ = self.demographic_model(x)
 
         for i, layer in enumerate(self.layers):
             if is_bias_modulation and i in self.modulated_layers_indices:
                 logging.debug(f"Applying bias modulation at layer {i}")
                 # mainly used during training
-                bias_vect = sensitive_embeddings[i]
+                bias_vect = sensitive_embeddings[i] 
                 x = layer[0](x, bias_vect=bias_vect)  # ModulatedLinear layer
                 x = layer[1](x)  # ReLU
                 x = layer[2](x)  # Dropout

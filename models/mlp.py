@@ -147,12 +147,14 @@ class MLP(L.LightningModule):
             group_id: ID of the group.
             stage: Stage of evaluation (train/val/test). Only "test" is implemented here.
         """
+        if len(labels) == 0:
+            return
         preds = torch.argmax(logits, dim=1)
-        group_acc_score = self.per_group_acc[group_id]
+        group_acc_score = self.per_group_acc[group_id].to(logits.device)
         acc = group_acc_score(preds, labels)
-        auc = self.per_group_auroc[group_id](preds, labels)
+        auc = self.per_group_auroc[group_id].to(logits.device)(preds, labels)
         loss = self.criterion(logits, labels)
-        ece = self.per_group_ece[group_id](logits, labels)
+        ece = self.per_group_ece[group_id].to(logits.device)(logits, labels)
         group_name = (
             self.group_names[group_id]
             if self.group_names is not None and len(self.group_names) > group_id

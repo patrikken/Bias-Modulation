@@ -1,0 +1,12 @@
+dropout: 0.4485005713935237
+head_weights:
+- 0.3
+- 0.7
+hidden_layers:
+- 64
+- 32
+learning_rate: 0.03274426678748606
+modulated_layers_indices:
+- 0
+- 1
+weight_decay: 0.0005306213616323169

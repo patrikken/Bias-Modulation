@@ -110,17 +110,18 @@ class DecoupledModel(MLP):
         for g in range(self.nb_group_labels):
             # perform per_dataset training.
             idx = group_idx == g
+            labels = y[idx]
             logits = self(x[idx], model_idx=g)
             # logits = self(x, group_idx=group_idx)
             loss = torch.tensor(
-                self.criterion(logits, y[idx]).detach().cpu().numpy()
+                self.criterion(logits, labels).detach().cpu().numpy()
             ).unsqueeze(0)
             preds = torch.argmax(logits, dim=1)
             # loss = loss.mean()
             if stage == "test":
-                self.log_group_metrics(logits, y[idx], g, stage)
+                self.log_group_metrics(logits, labels, g, stage)
             _preds.append(preds)
-            _y.append(y[idx])
+            _y.append(labels)
             _s.append(s[idx])
             _loss.append(loss)
         self.log_metrics(
