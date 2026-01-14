@@ -3,6 +3,7 @@ from models.mlp import MLP
 from models.bias_modulation import BiasModulated
 from dataloaders.datamodule import BaseDataModule
 from models.decoupled import DecoupledModel
+from models.generic import GenericModel
 from dataloaders.heart import Heart
 from dataloaders.mimic import Mimic
 from lightning.pytorch.cli import LightningCLI, LightningArgumentParser
@@ -62,25 +63,28 @@ def train_model(model_instance, trainer, datamodule):
         return test_results
 
     # add model checkpoint callback to save best model based on worst-group validation accuracy also EarlyStopping callback based on worst-group validation accuracy
-    trainer.callbacks = [
-        cb
-        for cb in trainer.callbacks
-        if not isinstance(cb, ModelCheckpoint) and not isinstance(cb, EarlyStopping)
-    ]
-    EarlyStopping_callback = EarlyStopping(
-        monitor="val__worst_group_acc",
-        patience=10,
-        mode="max",
-        verbose=True,
-    )
-    trainer.callbacks.append(EarlyStopping_callback)
-    checkpoint_callback = ModelCheckpoint(
-        monitor="val__worst_group_acc",
-        mode="max",
-        filename="best_{epoch}_{val_head_worst_acc:.4f}",
-        save_top_k=1,
-    )
-    trainer.callbacks.append(checkpoint_callback)
+    
+    if not isinstance(model_instance, DecoupledModel) and not isinstance(model_instance, GenericModel):
+        trainer.callbacks = [
+            cb
+            for cb in trainer.callbacks
+            if not isinstance(cb, ModelCheckpoint) and not isinstance(cb, EarlyStopping)
+        ]
+        EarlyStopping_callback = EarlyStopping(
+            monitor="val_worst_group_loss",
+            patience=10,
+            mode="min",
+            verbose=True,
+            min_delta=0.001,
+        )
+        trainer.callbacks.append(EarlyStopping_callback)
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val_worst_group_loss",
+            mode="min",
+            filename="best_{epoch}_{val_worst_group_loss:.4f}",
+            save_top_k=1,
+        )
+        trainer.callbacks.append(checkpoint_callback)
     trainer.fit(model_instance, datamodule=datamodule)
     test_results = trainer.test(model_instance, datamodule=datamodule, ckpt_path="best")
     logging.info(f"Test Results: {test_results}")

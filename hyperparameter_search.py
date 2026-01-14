@@ -12,10 +12,10 @@ from optuna.integration import PyTorchLightningPruningCallback
 import copy
 import torch
 import os
-from lightning.pytorch.callbacks import RichProgressBar
+from lightning.pytorch.callbacks import RichProgressBar, ModelCheckpoint, EarlyStopping
 
 
-def train_model(cfg, model, datamodule, trainer):
+def train_model(cfg, model, datamodule, trainer, stopping_criteria="val_loss"):
     datamodule.setup(stage="fit")
     callbacks = [copy.deepcopy(c) for c in trainer.callbacks if not isinstance(c, RichProgressBar) and not isinstance(c, PyTorchLightningPruningCallback)]
     if isinstance(model, BiasModulated):
@@ -59,10 +59,30 @@ def train_model(cfg, model, datamodule, trainer):
         avg_val_loss = val_loss / group_labels
         logging.info(f"Average validation loss across groups: {avg_val_loss}")
         return avg_val_loss
-
+    if stopping_criteria == "val_worst_group_loss":
+        trainer.callbacks = [
+            cb
+            for cb in trainer.callbacks
+            if not isinstance(cb, ModelCheckpoint) and not isinstance(cb, EarlyStopping)
+        ]
+        EarlyStopping_callback = EarlyStopping(
+            monitor="val_worst_group_loss",
+            patience=15,
+            mode="min",
+            verbose=True,
+            min_delta=0.0001,
+        )
+        trainer.callbacks.append(EarlyStopping_callback)
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val_worst_group_loss",
+            mode="min",
+            filename="best_{epoch}_{val_worst_group_loss:.4f}",
+            save_top_k=1,
+        )
+        trainer.callbacks.append(checkpoint_callback)
     trainer.fit(model, datamodule=datamodule)
 
-    return trainer.callback_metrics["val_loss"].item()
+    return trainer.callback_metrics[stopping_criteria].item()
 
 
 if __name__ == "__main__":
@@ -120,15 +140,18 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unsupported dataset: {cfg['dataset_name']}")
 
+    stopping_criteria = "val_worst_group_loss"  # or "val_loss" based on preference
     if cfg["method_name"] == "generic":
         cfg["model"]["class_path"] = "models.generic.GenericModel"
+        stopping_criteria = "val_loss" # use val_loss for generic model 
     elif cfg["method_name"] == "decoupled":
         cfg["model"]["class_path"] = "models.decoupled.DecoupledModel"
+        stopping_criteria = "val_loss" # use val_loss for decoupled model
     elif cfg["method_name"] == "bias_modulation":
-        cfg["model"]["class_path"] = "models.bias_modulation.BiasModulated"
+        cfg["model"]["class_path"] = "models.bias_modulation.BiasModulated" 
     elif cfg["method_name"] == "1hot":
         cfg["model"]["class_path"] = "models.generic.GenericModel"
-        cfg["data"]["init_args"]["is_1hot"] = True
+        cfg["data"]["init_args"]["is_1hot"] = True 
     elif cfg["method_name"] == "intersectional":
         cfg["model"]["class_path"] = "models.generic.GenericModel"
         cfg["data"]["init_args"]["is_intersectional"] = True
@@ -160,7 +183,7 @@ if __name__ == "__main__":
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-1)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2)
         hidden_layers = trial.suggest_categorical(
-            "hidden_layers", [[32, 32], [64, 32], [128, 64]]
+            "hidden_layers", [[32, 32, 32, 32], [64, 32, 32], [64, 32], [32, 32]]
         )
         dropout = trial.suggest_float("dropout", 0.2, 0.5)
 
@@ -223,7 +246,7 @@ if __name__ == "__main__":
             log_every_n_steps=1,
             #check_val_every_n_epoch=1,
         )
-        val_loss = train_model(conf, model_instance, datamodule, trainer_instance)
+        val_loss = train_model(conf, model_instance, datamodule, trainer_instance, stopping_criteria=stopping_criteria)
         return val_loss
 
     def optimize_hyperparameters(n_trials=5):
@@ -258,7 +281,7 @@ if __name__ == "__main__":
 
         return trial.params
 
-    def train_final_model(best_params):
+    def train_final_model(best_params, stopping_criteria=stopping_criteria):
         # Update cfg with best hyperparameters
         for key, value in best_params.items():
             if key in cfg["model"]["init_args"]:
@@ -309,6 +332,29 @@ if __name__ == "__main__":
             test_results = trainer.test(model, datamodule=datamodule)
             logging.info(f"Test Results: {test_results}")
             return test_results 
+        
+        if stopping_criteria == "val_worst_group_loss":
+            trainer.callbacks = [
+                cb
+                for cb in trainer.callbacks
+                if not isinstance(cb, ModelCheckpoint) and not isinstance(cb, EarlyStopping)
+            ]
+            EarlyStopping_callback = EarlyStopping(
+                monitor="val_worst_group_loss",
+                patience=15,
+                mode="min",
+                verbose=True,
+                min_delta=0.0001,
+            )
+            trainer.callbacks.append(EarlyStopping_callback)
+            checkpoint_callback = ModelCheckpoint(
+                monitor="val_worst_group_loss",
+                mode="min",
+                filename="best_{epoch}_{val_worst_group_loss:.4f}",
+                save_top_k=1,
+            )
+            trainer.callbacks.append(checkpoint_callback)
+
         trainer.fit(model_instance, datamodule=datamodule)
         test_results = trainer.test(model_instance, datamodule=datamodule)
         logging.info(f"Test Results: {test_results}")

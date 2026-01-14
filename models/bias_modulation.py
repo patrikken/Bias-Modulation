@@ -225,7 +225,7 @@ class DemographicPredictor(MLP):
         self.log(f"{stage}_loss", loss, on_step=False, on_epoch=True, sync_dist=True)
         return loss
 
-    def compute_per_group_acc(self, batch):
+    def compute_per_group_acc(self, batch, stage="test"):
         x, y, s, group_idx = batch
         _preds = []
         _s = []
@@ -237,7 +237,7 @@ class DemographicPredictor(MLP):
             # logits = self(x, group_idx=group_idx)
             preds = torch.argmax(logits, dim=1)
             # loss = loss.mean()
-            self.log_group_metrics(logits, y[idx], g)
+            self.log_group_metrics(logits, y[idx], g, stage=stage)
 
             _preds.append(preds)
             _y.append(y[idx])
@@ -313,6 +313,8 @@ class DemographicPredictor(MLP):
                 sync_dist=True,
             ) """
         return
+    def validation_step(self, batch, batch_idx): 
+        return self._step(batch, "val")
 
 
 class BiasModulated(MLP):

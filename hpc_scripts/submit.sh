@@ -1,7 +1,7 @@
 #!/bin/bash
 
 datasets=("mimic" "heart")
-datasets=("sap")
+datasets=("mimic" "heart" "sap" "mortality")
 methods=("bias_modulation" "1hot" "intersectional" "generic" "multitask" "decoupled") 
 #methods=("multitask")
 #methods=("decoupled")

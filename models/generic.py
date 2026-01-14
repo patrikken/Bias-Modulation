@@ -12,3 +12,4 @@ class GenericModel(MLP):
 
     def log_metrics(self, preds, y, s, loss, stage):
         super().log_metrics(preds, y, s, loss, stage)
+        

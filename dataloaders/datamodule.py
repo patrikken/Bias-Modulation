@@ -75,7 +75,9 @@ class BaseDataModule(LightningDataModule):
         if stage == "fit" or stage is None:
             self.dataset = self.model_class(
                 **self.get_model_class_params(), train=True
-            ).preprocess()
+            )
+            self.dataset.download()
+            self.dataset.preprocess()
             if self.dataset.val_idx is None:
                 (
                     self.dataset.train_idx,
@@ -92,7 +94,9 @@ class BaseDataModule(LightningDataModule):
         elif stage == "test":
             self.dataset = self.model_class(
                 **self.get_model_class_params()
-            ).preprocess()
+            )
+            self.dataset.download()
+            self.dataset.preprocess()
             self.test = SubSet(self.dataset, self.dataset.test_idx)
             self.input_dim = self.dataset.input_dim
 

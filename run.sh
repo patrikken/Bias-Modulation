@@ -4,11 +4,11 @@
 module load python/3.12
 source /home/joslin/scratch/Bias-Modulation/.env/bin/activate
 
-methods=("1hot" "intersectional" "generic" "multitask" "decoupled")   # "bias_modulation" 
-methods=("decoupled")   # "bias_modulation" 
-sensitive_feature_list=("['sex', 'age']") # "['sex']" "['age']")  
+methods=("generic" "bias_modulation" "1hot" "intersectional" "multitask" "decoupled")   # "bias_modulation" 
+methods=("1hot" "intersectional" "bias_modulation" )   # "bias_modulation" 
+sensitive_feature_list=("['sex', 'age']" "['sex']" "['age']")  #("['sex', 'age']") # "['sex']" "['age']")  
 #sensitive_attribs="['age']" #"['sex', 'age']" # "['sex']" "['age']"
-dataset_name="sap"
+dataset_name="heart"
 for sensitive_attribs in "${sensitive_feature_list[@]}"; do
     for seed in {1..5}; do
     for method in "${methods[@]}"; do

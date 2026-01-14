@@ -126,22 +126,22 @@ class MLP(L.LightningModule):
         x, y, s, group_idx = batch
         _preds = []
         _s = []
-        _y = []
-        worst_group_acc = 1.0
+        _y = [] 
+        worst_group_loss = 0.0
         for g in range(self.nb_group_labels):
             idx = group_idx == g
             logits = self._get_logits(x[idx])
             # logits = self(x, group_idx=group_idx)
             preds = torch.argmax(logits, dim=1)
             # loss = loss.mean()
-            g_acc = self.log_group_metrics(logits, y[idx], g, stage)
-            if g_acc is not None:
-                if g_acc < worst_group_acc:
-                    worst_group_acc = g_acc
+            g_loss = self.log_group_metrics(logits, y[idx], g, stage)
+            if g_loss is not None:
+                if g_loss > worst_group_loss:
+                    worst_group_loss = g_loss
             _preds.append(preds)
             _y.append(y[idx])
             _s.append(s[idx])
-        self.log(f"{stage}_worst_group_acc", worst_group_acc, sync_dist=True)
+        self.log(f"{stage}_worst_group_loss", worst_group_loss, sync_dist=True, prog_bar=True)
         return torch.cat(_preds), torch.cat(_y), torch.cat(_s)
 
     def log_group_metrics(self, logits, labels, group_id, stage="test"):
@@ -170,7 +170,7 @@ class MLP(L.LightningModule):
         self.log(f"{stage}_group_{group_name}_acc", acc, sync_dist=True)
         self.log(f"{stage}_group_{group_name}_loss", loss, sync_dist=True)
         self.log(f"{stage}_group_{group_name}_ece", ece, sync_dist=True)
-        return acc
+        return loss
 
     def log_metrics(self, preds, y, s, loss, stage):
         if stage == "test":
