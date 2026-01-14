@@ -6,7 +6,7 @@ model:
   init_args:
     input_dim: 11
     output_dim: 2
-    hidden_layers: [32, 32]
+    hidden_layers: [32, 32, 32, 32]
     activation: relu
     dropout: 0.5
     learning_rate: 0.001

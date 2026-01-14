@@ -12,57 +12,80 @@ from optuna.integration import PyTorchLightningPruningCallback
 import copy
 import torch
 import os
-from lightning.pytorch.callbacks import RichProgressBar
- 
-def train_model(model_instance, trainer, datamodule):   
-        model_instance.group_names = datamodule.dataset.group_label_names
-        # train_model(cfg, model_instance, datamodule, trainer) 
-        if isinstance(model_instance, BiasModulated):
-            logging.info("Training Demographic Predictor first...")
-            demog_pred = model_instance.demographic_model
-            demog_trainer = Trainer(
+from lightning.pytorch.callbacks import RichProgressBar, ModelCheckpoint, EarlyStopping
+
+
+def train_model(model_instance, trainer, datamodule):
+    model_instance.group_names = datamodule.dataset.group_label_names
+    # train_model(cfg, model_instance, datamodule, trainer)
+    if isinstance(model_instance, BiasModulated):
+        logging.info("Training Demographic Predictor first...")
+        demog_pred = model_instance.demographic_model
+        demog_trainer = Trainer(
+            max_epochs=100,
+            callbacks=[copy.deepcopy(cb) for cb in trainer.callbacks],
+            # logger=trainer.logger,
+            enable_progress_bar=True,
+            enable_model_summary=False,
+            devices=1,
+            accelerator="cuda" if torch.cuda.is_available() else "cpu",
+            log_every_n_steps=5,
+        )
+        demog_trainer.fit(model_instance.demographic_model, datamodule=datamodule)
+        logging.info("Demographic Predictor training completed.")
+        model_instance.demographic_model = demog_pred
+    elif isinstance(model_instance, DecoupledModel):
+        logging.info("Training Decoupled Model...")
+
+        group_labels = datamodule.dataset.nb_group_labels
+        val_loss = 0.0
+        for g in range(group_labels):
+            logging.info(f"Training model for group {g}...")
+            model_instance.set_current_group(g)
+            group_trainer = Trainer(
                 max_epochs=100,
-                callbacks=[copy.deepcopy(cb) for cb in trainer.callbacks],
-                #logger=trainer.logger,
+                callbacks=[
+                    copy.deepcopy(cb) for cb in trainer.callbacks
+                ],  # ensure each group has its own callbacks
+                # logger=trainer.logger,
                 enable_progress_bar=True,
                 enable_model_summary=False,
                 devices=1,
                 accelerator="cuda" if torch.cuda.is_available() else "cpu",
-                log_every_n_steps=5
+                log_every_n_steps=5,
             )
-            demog_trainer.fit(model_instance.demographic_model, datamodule=datamodule) 
-            logging.info("Demographic Predictor training completed.")
-            model_instance.demographic_model = demog_pred
-        elif isinstance(model_instance, DecoupledModel):
-            logging.info("Training Decoupled Model...")
+            group_trainer.fit(model_instance, datamodule=datamodule)
+            logging.info(f"Model training for group {g} completed.")
 
-            group_labels = datamodule.dataset.nb_group_labels
-            val_loss = 0.0
-            for g in range(group_labels):
-                logging.info(f"Training model for group {g}...")
-                model_instance.set_current_group(g)
-                group_trainer = Trainer(
-                    max_epochs=100,
-                    callbacks=[copy.deepcopy(cb) for cb in trainer.callbacks], # ensure each group has its own callbacks
-                    #logger=trainer.logger,
-                    enable_progress_bar=True,
-                    enable_model_summary=False,
-                    devices=1,
-                    accelerator="cuda" if torch.cuda.is_available() else "cpu",
-                    log_every_n_steps=5
-                )
-                group_trainer.fit(model_instance, datamodule=datamodule) 
-                logging.info(f"Model training for group {g} completed.") 
-            
-            test_results = trainer.test(model_instance, datamodule=datamodule)
-            logging.info(f"Test Results: {test_results}")
-            return test_results 
-        
-        trainer.fit(model_instance, datamodule=datamodule)
-        test_results = trainer.test(model_instance, datamodule=datamodule, ckpt_path="best")
+        test_results = trainer.test(model_instance, datamodule=datamodule)
         logging.info(f"Test Results: {test_results}")
-
         return test_results
+
+    # add model checkpoint callback to save best model based on worst-group validation accuracy also EarlyStopping callback based on worst-group validation accuracy
+    trainer.callbacks = [
+        cb
+        for cb in trainer.callbacks
+        if not isinstance(cb, ModelCheckpoint) and not isinstance(cb, EarlyStopping)
+    ]
+    EarlyStopping_callback = EarlyStopping(
+        monitor="val__worst_group_acc",
+        patience=10,
+        mode="max",
+        verbose=True,
+    )
+    trainer.callbacks.append(EarlyStopping_callback)
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val__worst_group_acc",
+        mode="max",
+        filename="best_{epoch}_{val_head_worst_acc:.4f}",
+        save_top_k=1,
+    )
+    trainer.callbacks.append(checkpoint_callback)
+    trainer.fit(model_instance, datamodule=datamodule)
+    test_results = trainer.test(model_instance, datamodule=datamodule, ckpt_path="best")
+    logging.info(f"Test Results: {test_results}")
+
+    return test_results
 
 
 if __name__ == "__main__":
@@ -100,7 +123,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--dataset_name", help="Name of the dataset to use", choices=["heart", "mimic", "sap"]
+        "--dataset_name",
+        help="Name of the dataset to use",
+        choices=["heart", "mimic", "sap"],
     )
 
     """ parser.add_argument(
@@ -141,31 +166,30 @@ if __name__ == "__main__":
 
     seed_everything(seed)
     init = parser.instantiate_classes(cfg, instantiate_groups=True)
-    
-    
 
     model = init["model"]
     datamodule = init["data"]
     trainer = init["trainer"]
-    
 
     datamodule.setup(stage="fit")
     input_dim = datamodule.dataset.input_dim
     nb_groups = datamodule.dataset.nb_groups  #
     sensitive_attr = "_".join(datamodule.dataset.sensitive_attr)
-    best_hyperparam_path = f"configs/best_hyperparameters/{cfg['dataset_name']}/{cfg['method_name']}/{sensitive_attr}/best_hyperparameters.yaml" 
+    best_hyperparam_path = f"configs/best_hyperparameters/{cfg['dataset_name']}/{cfg['method_name']}/{sensitive_attr}/best_hyperparameters.yaml"
 
     if os.path.exists(best_hyperparam_path):
         logging.info(f"Loading best hyperparameters from {best_hyperparam_path}")
         import yaml
 
-        with open(best_hyperparam_path, "r") as f: 
+        with open(best_hyperparam_path, "r") as f:
             for key, value in yaml.safe_load(f).items():
-                #if key in cfg["model"]["init_args"]:
-                logging.info(f"Best hyperparameter - {key}: {value}") 
+                # if key in cfg["model"]["init_args"]:
+                logging.info(f"Best hyperparameter - {key}: {value}")
                 cfg["model"]["init_args"][key] = value
     else:
-        logging.info(f"No best hyperparameters found at {best_hyperparam_path}. Using default parameters.")
+        logging.info(
+            f"No best hyperparameters found at {best_hyperparam_path}. Using default parameters."
+        )
     cfg["model"]["init_args"]["input_dim"] = input_dim
     cfg["model"]["init_args"][
         "nb_groups"
@@ -173,10 +197,10 @@ if __name__ == "__main__":
         datamodule.dataset.nb_groups
     )  # for defining number of heads in multitask setting or number of models in decoupled setting
     cfg["model"]["init_args"]["nb_group_labels"] = datamodule.dataset.nb_group_labels
- 
+
     model_instance = model.__class__(**cfg["model"]["init_args"])
     test_results = train_model(model_instance, trainer, datamodule)
-    
+
     out_dir = os.path.join("results", cfg["dataset_name"], cfg["method_name"])
     dir_results = os.path.join(out_dir, sensitive_attr)
     save_test_results(dir_results, test_results, seed=seed)

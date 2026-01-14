@@ -106,6 +106,7 @@ class MLP(L.LightningModule):
         return self._step(batch, "train")
 
     def validation_step(self, batch, batch_idx):
+        self.compute_per_group_acc(batch, stage="val")
         return self._step(batch, "val")
 
     def test_step(self, batch, batch_idx):
@@ -126,16 +127,21 @@ class MLP(L.LightningModule):
         _preds = []
         _s = []
         _y = []
+        worst_group_acc = 1.0
         for g in range(self.nb_group_labels):
             idx = group_idx == g
             logits = self._get_logits(x[idx])
             # logits = self(x, group_idx=group_idx)
             preds = torch.argmax(logits, dim=1)
             # loss = loss.mean()
-            self.log_group_metrics(logits, y[idx], g, stage)
+            g_acc = self.log_group_metrics(logits, y[idx], g, stage)
+            if g_acc is not None:
+                if g_acc < worst_group_acc:
+                    worst_group_acc = g_acc
             _preds.append(preds)
             _y.append(y[idx])
             _s.append(s[idx])
+        self.log(f"{stage}_worst_group_acc", worst_group_acc, sync_dist=True)
         return torch.cat(_preds), torch.cat(_y), torch.cat(_s)
 
     def log_group_metrics(self, logits, labels, group_id, stage="test"):
@@ -164,6 +170,7 @@ class MLP(L.LightningModule):
         self.log(f"{stage}_group_{group_name}_acc", acc, sync_dist=True)
         self.log(f"{stage}_group_{group_name}_loss", loss, sync_dist=True)
         self.log(f"{stage}_group_{group_name}_ece", ece, sync_dist=True)
+        return acc
 
     def log_metrics(self, preds, y, s, loss, stage):
         if stage == "test":
